@@ -41,6 +41,42 @@ An Aloe test case is called a feature. Developers program features using two fil
 
 The _Steps_ file contains Python functions that are mapped to the _Feature_ file steps using regular expressions.
 
+```bash
+nosetests --verbosity=1
+Creating test database for alias 'default'...
+E
+======================================================================
+ERROR: A user can log into the app (example.features.friendships: Friendships)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/parentj/.virtualenvs/blog-aloe-bdd/lib/python3.6/site-packages/aloe/registry.py", line 161, in wrapped
+    return function(*args, **kwargs)
+  File "/Users/parentj/Projects/blog-aloe-bdd/example_bdd/example/features/friendships.feature", line 5, in A user can log into the app
+    Given I empty the "User" table
+  File "/Users/parentj/.virtualenvs/blog-aloe-bdd/lib/python3.6/site-packages/aloe/registry.py", line 161, in wrapped
+    return function(*args, **kwargs)
+  File "/Users/parentj/.virtualenvs/blog-aloe-bdd/lib/python3.6/site-packages/aloe/exceptions.py", line 61, in undefined_step
+    raise NoDefinitionFound(step)
+aloe.exceptions.NoDefinitionFound: The step r"Given I empty the "User" table" is not defined
+
+----------------------------------------------------------------------
+Ran 1 test in 0.509s
+
+FAILED (errors=1)
+Destroying test database for alias 'default'...
+```
+
+```bash
+nosetests --verbosity=1
+Creating test database for alias 'default'...
+.
+----------------------------------------------------------------------
+Ran 1 test in 0.512s
+
+OK
+Destroying test database for alias 'default'...
+```
+
 **features/friendships_steps.py**
 
 ```python
@@ -113,6 +149,7 @@ Feature: Friendships
       | id | email             | username | password  |
       | 1  | annie@example.com | Annie    | pAssw0rd! |
       | 2  | brian@example.com | Brian    | pAssw0rd! |
+      | 3  | casey@example.com | Casey    | pAssw0rd! |
 
     When I log in with username "Annie" and password "pAssw0rd!"
 
@@ -147,14 +184,23 @@ from django.db import models
 
 
 class Friendship(models.Model):
-    user1 = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='user1_friendships')
-    user2 = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='user2_friendships')
+    user1 = models.ForeignKey(
+      settings.AUTH_USER_MODEL, 
+      on_delete=models.CASCADE, 
+      related_name='user1_friendships'
+    )
+    user2 = models.ForeignKey(
+      settings.AUTH_USER_MODEL, 
+      on_delete=models.CASCADE, 
+      related_name='user2_friendships'
+    )
 ```
 
 Then you make a migration.
 
 ```bash
 python manage.py makemigrations
+python manage.py migrate
 ```
 
 Next, you create a new test step for the `I create the following friendships:` statement.
@@ -192,7 +238,7 @@ from .models import Friendship
 
 
 class FriendsView(View):
-    def get(self, request):
+    def get(self, request, *args, **kwargs):
         # Get all friendships that involve the logged-in user.
         friendships = Friendship.objects.select_related('user1', 'user2').filter(
             Q(user1=request.user) |
@@ -265,4 +311,277 @@ Scenario: A user with no friends sees an empty list
 
   Then I see the following response data:
     | id | email | username |
+```
+
+"A user should be able to add another user as a friend."
+
+```gherkin
+Scenario: A user can add a friend
+
+  Given I empty the "Friendship" table
+
+  When I add a friend with "Brian"
+
+  Then I see the following rows in the "Friendship" table:
+    | user1 | user2 |
+    | 1     | 2     |
+```
+
+```python
+@step('I add a friend with "([^"]+)"')
+def step_add_friend(self, username):
+    world.response = world.client.post('/friends/', data={'username': username})
+
+
+@step('I see the following rows in the "([^"]+)" table:')
+def step_confirm_table(self, model_name):
+    model_class = get_model(model_name)
+    for data in guess_types(self.hashes):
+        has_row = model_class.objects.filter(**data).exists()
+        assert_true(has_row)
+```
+
+```python
+def post(self, request, *args, **kwargs):
+    username = request.POST.get('username')
+    user = get_object_or_404(User, username=username)
+
+    # Confirm the friendship is not with yourself.
+    if request.user == user:
+        return JsonResponse(
+            data={'detail': 'You cannot create a friendship with yourself.'}
+        )
+
+    # Confirm the friendship does not exist.
+    has_friendship = Friendship.objects.filter(
+        Q(user1=request.user, user2=user) |
+        Q(user1=user, user2=request.user)
+    ).exists()
+
+    if has_friendship:
+        return JsonResponse(
+            data={'detail': 'You cannot create a new friendship with an existing friend.'}
+        )
+
+    # Create a new friendship between the users.
+    Friendship.objects.create(user1=request.user, user2=user)
+
+    return JsonResponse({
+        'id': user.id,
+        'email': user.email,
+        'username': user.username,
+    })
+```
+
+Add `from django.shortcuts import get_object_or_404`.
+
+```gherkin
+Scenario: A user can request a friendship with another user
+
+  Given I empty the "Friendship" table
+
+  When I request a friendship with "Brian"
+
+  Then I see the following response data:
+    | id | user1 | user2 | status  |
+    | 3  | 1     | 2     | PENDING |
+```
+
+```python
+@step('I request a friendship with "([^"]+)"')
+def step_request_friendship(self, username):
+    world.response = world.client.post('/friendship-requests/', data={'username': username})
+```
+
+```python
+class Friendship(models.Model):
+    PENDING = 'PENDING'
+    ACCEPTED = 'ACCEPTED'
+    REJECTED = 'REJECTED'
+    STATUSES = (
+      (PENDING, PENDING),
+      (ACCEPTED, ACCEPTED),
+      (REJECTED, REJECTED),
+    )
+    user1 = models.ForeignKey(
+      settings.AUTH_USER_MODEL, 
+      on_delete=models.CASCADE, 
+      related_name='user1_friendships'
+    )
+    user2 = models.ForeignKey(
+      settings.AUTH_USER_MODEL, 
+      on_delete=models.CASCADE, 
+      related_name='user2_friendships'
+    )
+    status = models.CharField(max_length=8, choices=STATUSES, default=PENDING)
+```
+
+```bash
+python manage.py makemigrations
+python manage.py migrate
+```
+
+```python
+class FriendshipRequestsView(View):
+    def post(self, request, *args, **kwargs):
+        username = request.POST.get('username')
+        user = get_object_or_404(User, username=username)
+
+        # Confirm the friendship is not with yourself.
+        if request.user == user:
+            return JsonResponse(
+                data={'detail': 'You cannot create a friendship with yourself.'}
+            )
+
+        # Confirm the friendship does not exist.
+        has_friendship = Friendship.objects.filter(
+            Q(user1=request.user, user2=user) |
+            Q(user1=user, user2=request.user)
+        ).exists()
+
+        if has_friendship:
+            return JsonResponse(
+                data={'detail': 'You cannot create a new friendship with an existing friend.'}
+            )
+
+        # Create a new friendship between the users.
+        friendship = Friendship.objects.create(user1=request.user, user2=user)
+
+        return JsonResponse({
+            'id': friendship.id,
+            'user1': friendship.user1_id,
+            'user2': friendship.user2_id,
+            'status': friendship.status,
+        })
+```
+
+```python
+path('friendship-requests/', FriendshipRequestsView.as_view())
+```
+
+Import `from example.views import FriendshipRequestsView`.
+
+```gherkin
+Scenario: A user can accept a friendship request
+
+  Given I empty the "Friendship" table
+
+  And I create the following friendships:
+    | id | user1 | user2 | status  |
+    | 1  | 2     | 1     | PENDING |
+
+  When I accept the friendship request with ID "1"
+
+  Then I see the following response data:
+    | id | user1 | user2 | status   |
+    | 1  | 2     | 1     | ACCEPTED |
+
+Scenario: A user can reject a friendship request
+
+  Given I empty the "Friendship" table
+
+  And I create the following friendships:
+    | id | user1 | user2 | status  |
+    | 1  | 2     | 1     | PENDING |
+
+  When I reject the friendship request with ID "1"
+
+  Then I see the following response data:
+    | id | user1 | user2 | status   |
+    | 1  | 2     | 1     | REJECTED |
+```
+
+```python
+@step('I accept the friendship request with ID "([^"]+)"')
+def step_accept_friendship_request(self, pk):
+    world.response = world.client.put(f'/friendship-requests/{pk}/', data=json.dumps({
+      'status': Friendship.ACCEPTED
+    }), content_type='application/json')
+
+
+@step('I reject the friendship request with ID "([^"]+)"')
+def step_reject_friendship_request(self, pk):
+    world.response = world.client.put(f'/friendship-requests/{pk}/', data=json.dumps({
+      'status': Friendship.REJECTED
+    }), content_type='application/json')
+```
+
+```python
+path('friendship-requests/<int:pk>/', FriendshipRequestsView.as_view())
+```
+
+```python
+def put(self, request, *args, **kwargs):
+    # Update friendship.
+    friendship = get_object_or_404(Friendship, pk=kwargs.get('pk'))
+    for key, value in json.loads(request.body).items():
+        setattr(friendship, key, value)
+    friendship.save()
+
+    return JsonResponse({
+        'id': friendship.id,
+        'user1': friendship.user1_id,
+        'user2': friendship.user2_id,
+        'status': friendship.status,
+    })
+```
+
+Update `Scenario: A user can see a list of friends` like the following.
+
+```gherkin
+Scenario: A user can see a list of friends
+
+  Given I empty the "Friendship" table
+
+  And I create the following friendships:
+    | id | user1 | user2 | status   |
+    | 1  | 1     | 2     | ACCEPTED |
+
+  # Annie and Brian are now friends.
+
+  When I get a list of friends
+
+  Then I see the following response data:
+    | id | email             | username |
+    | 2  | brian@example.com | Brian    |
+```
+
+Add one more scenario.
+
+```gherkin
+Scenario: A user with no accepted friendship requests sees an empty list
+
+  Given I empty the "Friendship" table
+
+  And I create the following friendships:
+    | id | user1 | user2 | status   |
+    | 1  | 1     | 2     | PENDING  |
+    | 2  | 1     | 3     | REJECTED |
+
+  When I get a list of friends
+
+  Then I see the following response data:
+    | id | email | username |
+```
+
+```python
+@step('I create the following friendships:')
+def step_create_friendships(self):
+    Friendship.objects.bulk_create([
+        Friendship(
+            id=data['id'],
+            user1=User.objects.get(id=data['user1']),
+            user2=User.objects.get(id=data['user2']),
+            status=data['status']
+        ) for data in guess_types(self.hashes)
+    ])
+```
+
+```python
+# Get all friendships that involve the logged-in user.
+friendships = Friendship.objects.select_related('user1', 'user2').filter(
+    Q(user1=request.user) |
+    Q(user2=request.user),
+    status=Friendship.ACCEPTED
+)
 ```

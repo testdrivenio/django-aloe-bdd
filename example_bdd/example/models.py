@@ -13,6 +13,22 @@ class FriendshipManager(models.Manager):
 
 
 class Friendship(models.Model):
-    objects = FriendshipManager()
-    user1 = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='user1_friendships')
-    user2 = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='user2_friendships')
+    PENDING = 'PENDING'
+    ACCEPTED = 'ACCEPTED'
+    REJECTED = 'REJECTED'
+    STATUSES = (
+      (PENDING, PENDING),
+      (ACCEPTED, ACCEPTED),
+      (REJECTED, REJECTED),
+    )
+    user1 = models.ForeignKey(
+      settings.AUTH_USER_MODEL,
+      on_delete=models.CASCADE,
+      related_name='user1_friendships'
+    )
+    user2 = models.ForeignKey(
+      settings.AUTH_USER_MODEL,
+      on_delete=models.CASCADE,
+      related_name='user2_friendships'
+    )
+    status = models.CharField(max_length=8, choices=STATUSES, default=PENDING)

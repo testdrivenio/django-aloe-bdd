@@ -1,31 +1,26 @@
 Feature: Friendships
 
-  Background:
+  Background: Set up common data
 
-    Given I empty the "Users" table
+    Given I empty the "User" table
 
     And I create the following users:
       | id | email             | username | password  |
       | 1  | annie@example.com | Annie    | pAssw0rd! |
       | 2  | brian@example.com | Brian    | pAssw0rd! |
       | 3  | casey@example.com | Casey    | pAssw0rd! |
-      | 4  | david@example.com | David    | pAssw0rd! |
 
     When I log in with username "Annie" and password "pAssw0rd!"
 
     Then I am logged in
 
-  Scenario: 1. A user can get a list of friends
+  Scenario: A user can see a list of friends
 
     Given I empty the "Friendship" table
 
-#    And I create the following "Friendship" data:
-#      | id | user1 | user2 |
-#      | 1  | 1     | 2     |
-
     And I create the following friendships:
-      | id | user1 | user2 |
-      | 1  | 1     | 2     |
+      | id | user1 | user2 | status   |
+      | 1  | 1     | 2     | ACCEPTED |
 
     # Annie and Brian are now friends.
 
@@ -35,42 +30,67 @@ Feature: Friendships
       | id | email             | username |
       | 2  | brian@example.com | Brian    |
 
-  Scenario: 2. A user can create a friendship with another user
+  Scenario: A user with no friends sees an empty list
 
     Given I empty the "Friendship" table
 
-    When I create a friendship with the following data:
-      | user1 | user2 |
-      | 1     | 2     |
+    # Annie has no friends.
+
+    When I get a list of friends
 
     Then I see the following response data:
-      | id | user1 | user2 |
-      | 2  | 1     | 2     |
+      | id | email | username |
 
-  Scenario: 3. A user cannot create a friendship with himself/herself
-
-    Given I empty the "Friendship" table
-
-    When I create a friendship with the following data:
-      | user1 | user2 |
-      | 1     | 1     |
-
-    Then I see the following response data:
-      | detail                                        |
-      | You cannot create a friendship with yourself. |
-
-  Scenario: 4. A user cannot create a new friendship with an existing friend
+  Scenario: A user with no accepted friendship requests sees an empty list
 
     Given I empty the "Friendship" table
 
     And I create the following friendships:
-      | id | user1 | user2 |
-      | 1  | 1     | 2     |
+      | id | user1 | user2 | status   |
+      | 1  | 1     | 2     | PENDING  |
+      | 2  | 1     | 3     | REJECTED |
 
-    When I create a friendship with the following data:
-      | user1 | user2 |
-      | 1     | 2     |
+    # No one has accepted Annie's friend requests.
+
+    When I get a list of friends
 
     Then I see the following response data:
-      | detail                                                      |
-      | You cannot create a new friendship with an existing friend. |
+      | id | email | username |
+
+  Scenario: A user can request a friendship with another user.
+
+    Given I empty the "Friendship" table
+
+    When I request a friendship with "Brian"
+
+    Then I see the following response data:
+      | id | user1 | user2 | status  |
+      | 3  | 1     | 2     | PENDING |
+
+  Scenario: A user can accept a friendship request
+
+    Given I empty the "Friendship" table
+
+    And I create the following friendships:
+      | id | user1 | user2 | status  |
+      | 1  | 2     | 1     | PENDING |
+
+    When I accept the friendship request with ID "1"
+
+    Then I see the following response data:
+      | id | user1 | user2 | status   |
+      | 1  | 2     | 1     | ACCEPTED |
+
+  Scenario: A user can reject a friendship request
+
+    Given I empty the "Friendship" table
+
+    And I create the following friendships:
+      | id | user1 | user2 | status  |
+      | 1  | 2     | 1     | PENDING |
+
+    When I reject the friendship request with ID "1"
+
+    Then I see the following response data:
+      | id | user1 | user2 | status   |
+      | 1  | 2     | 1     | REJECTED |
