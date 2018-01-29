@@ -11,6 +11,13 @@ By the time you complete this tutorial, you should:
 
 ## Project Setup
 
+```
+(venv) $ pip install django djangorestframework aloe_django
+(venv) $ django-admin startproject example_bdd
+(venv) $ cd example_bdd
+(venv) $ python manage.py startapp example
+```
+
 ## Brief Overview of BDD
 
 ## Your First Feature Request
@@ -19,7 +26,7 @@ By the time you complete this tutorial, you should:
 
 With that truism in mind you take the first half of the feature request and write a test scenario: _a user can log into the app_. In order to support user authentication, your app must store user credentials and give users a way to access their data with those credentials. Here's how you translate those criteria into an Aloe _.feature_ file.
 
-**features/friendships.feature**
+**example/features/friendships.feature**
 
 ```gherkin
 Feature: Friendships
@@ -41,7 +48,9 @@ An Aloe test case is called a feature. Developers program features using two fil
 
 The _Steps_ file contains Python functions that are mapped to the _Feature_ file steps using regular expressions.
 
-```bash
+You run `python manage.py harvest` and see the following output.
+
+```
 nosetests --verbosity=1
 Creating test database for alias 'default'...
 E
@@ -66,18 +75,7 @@ FAILED (errors=1)
 Destroying test database for alias 'default'...
 ```
 
-```bash
-nosetests --verbosity=1
-Creating test database for alias 'default'...
-.
-----------------------------------------------------------------------
-Ran 1 test in 0.512s
-
-OK
-Destroying test database for alias 'default'...
-```
-
-**features/friendships_steps.py**
+**example/features/friendships_steps.py**
 
 ```python
 from aloe import before, step, world
@@ -86,12 +84,13 @@ from aloe_django.steps.models import get_model
 from nose.tools import assert_true
 
 from django.contrib.auth.models import User
-from django.test.client import Client
+
+from rest_framework.test import APIClient
 
 
 @before.each_feature
 def before_each_feature(feature):
-    world.client = Client()
+    world.client = APIClient()
 
 
 @step('I empty the "([^"]+)" table')
@@ -119,11 +118,24 @@ Each statement is mapped to a Python function via a `@step()` decorator. For exa
 
 Run the Aloe test suite with the following command to see all tests pass.
 
-```bash
+```
 python manage.py harvest
 ```
 
+```
+nosetests --verbosity=1
+Creating test database for alias 'default'...
+.
+----------------------------------------------------------------------
+Ran 1 test in 0.512s
+
+OK
+Destroying test database for alias 'default'...
+```
+
 Write a test scenario for the second part of the feature request: _a user can see a list of friends_.
+
+**example/features/friendship.feature**
 
 ```gherkin
 Scenario: A user can see a list of friends
@@ -137,6 +149,8 @@ Scenario: A user can see a list of friends
 ```
 
 Before you run the Aloe test suite, modify the first scenario to use the keyword `Background` instead of `Scenario`. Background is a special type of scenario that is run once before every block defined by `Scenario` in the _Feature_ file. Every scenario needs to start with a clean slate and using `Background` refreshes the data every time it is run.
+
+**example/features/friendship.feature**
 
 ```gherkin
 Feature: Friendships
@@ -198,14 +212,14 @@ class Friendship(models.Model):
 
 Then you make a migration.
 
-```bash
+```
 python manage.py makemigrations
 python manage.py migrate
 ```
 
 Next, you create a new test step for the `I create the following friendships:` statement.
 
-**features/friendships_steps.py**
+**example/features/friendships_steps.py**
 
 ```python
 @step('I create the following friendships:')
@@ -227,39 +241,66 @@ from ..models import Friendship
 
 Create an API to get a list of the logged-in user's friends.
 
+First, you create a serializer to handle the representation of the `User` resource.
+
+**example/serializers.py**
+
+```python
+from django.contrib.auth.models import User
+from rest_framework import serializers
+
+
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ('id', 'email', 'username',)
+        read_only_fields = fields
+```
+
+Next, you create a manager to handle table-level functionality for your `Friendship` model.
+
+**example/models.py**
+
+```python
+class FriendshipManager(models.Manager):
+    def friends(self, user):
+        """Get all users that are friends with the specified user."""
+        # Get all friendships that involve the specified user.
+        friendships = self.get_queryset().select_related(
+            'user1', 'user2'
+        ).filter(
+            Q(user1=user) |
+            Q(user2=user)
+        )
+
+        def other_user(friendship):
+            if friendship.user1 == user:
+                return friendship.user2
+            return friendship.user1
+
+        return map(other_user, friendships)
+```
+
+Add `from django.db.models import Q` and add `objects = FriendshipManager()` to the `Friendship` model.
+
+Then, you create a simple `ListAPIView` to return a JSON-serialized representation of your `User` resources.
+
 **example/views.py**
 
 ```python
-from django.db.models import Q
-from django.http import JsonResponse
-from django.views import View
-
+from rest_framework.generics import ListAPIView
 from .models import Friendship
+from .serializers import UserSerializer
 
 
-class FriendsView(View):
-    def get(self, request, *args, **kwargs):
-        # Get all friendships that involve the logged-in user.
-        friendships = Friendship.objects.select_related('user1', 'user2').filter(
-            Q(user1=request.user) |
-            Q(user2=request.user)
-        )
+class FriendsView(ListAPIView):
+    serializer_class = UserSerializer
 
-        # Get a list of friends.
-        friends = [
-            friendship.user1 
-            if friendship.user2 == request.user 
-            else friendship.user2 
-            for friendship in friendships
-        ]
-
-        # Return a JSON-serialized list of friend data.
-        return JsonResponse([{
-            'id': friend.id,
-            'email': friend.email,
-            'username': friend.username,
-        } for friend in friends], safe=False)
+    def get_queryset(self):
+        return Friendship.objects.friends(self.request.user)
 ```
+
+Finally, you add a URL path.
 
 **example_bdd/urls.py**
 
@@ -274,6 +315,8 @@ urlpatterns = [
 ```
 
 Create the remaining Python step functions.
+
+**example/features/friendship_steps.py**
 
 ```python
 @step('I get a list of friends')
@@ -294,11 +337,13 @@ Import the `assert_count_equal()` and `assert_dict_equal()` functions from `nose
 
 You run the tests and watch them pass.
 
-```bash
+```
 python manage.py harvest
 ```
 
 Add one more test scenario.
+
+**example/features/friendship.feature**
 
 ```gherkin
 Scenario: A user with no friends sees an empty list
@@ -313,24 +358,32 @@ Scenario: A user with no friends sees an empty list
     | id | email | username |
 ```
 
+New feature:
+
 "A user should be able to add another user as a friend."
+
+**example/features/friendship.feature**
 
 ```gherkin
 Scenario: A user can add a friend
 
   Given I empty the "Friendship" table
 
-  When I add a friend with "Brian"
+  When I add the following friendship:
+    | user1 | user2 |
+    | 1     | 2     |
 
   Then I see the following rows in the "Friendship" table:
     | user1 | user2 |
     | 1     | 2     |
 ```
 
+**example/features/friendship_steps.py**
+
 ```python
-@step('I add a friend with "([^"]+)"')
-def step_add_friend(self, username):
-    world.response = world.client.post('/friends/', data={'username': username})
+@step('I add the following friendship:')
+def step_add_friendship(self):
+    world.response = world.client.post('/friendship/', data=guess_types(self.hashes[0]))
 
 
 @step('I see the following rows in the "([^"]+)" table:')
@@ -341,57 +394,100 @@ def step_confirm_table(self, model_name):
         assert_true(has_row)
 ```
 
+You extend the manager and do some refactoring.
+
+**example/models.py**
+
 ```python
-def post(self, request, *args, **kwargs):
-    username = request.POST.get('username')
-    user = get_object_or_404(User, username=username)
-
-    # Confirm the friendship is not with yourself.
-    if request.user == user:
-        return JsonResponse(
-            data={'detail': 'You cannot create a friendship with yourself.'}
+class FriendshipManager(models.Manager):
+    def friendships(self, user):
+        """Get all friendships that involve the specified user."""
+        return self.get_queryset().select_related(
+            'user1', 'user2'
+        ).filter(
+            Q(user1=user) |
+            Q(user2=user)
         )
 
-    # Confirm the friendship does not exist.
-    has_friendship = Friendship.objects.filter(
-        Q(user1=request.user, user2=user) |
-        Q(user1=user, user2=request.user)
-    ).exists()
+    def friends(self, user):
+        """Get all users that are friends with the specified user."""
+        friendships = self.friendships(user)
 
-    if has_friendship:
-        return JsonResponse(
-            data={'detail': 'You cannot create a new friendship with an existing friend.'}
-        )
+        def other_user(friendship):
+            if friendship.user1 == user:
+                return friendship.user2
+            return friendship.user1
 
-    # Create a new friendship between the users.
-    Friendship.objects.create(user1=request.user, user2=user)
-
-    return JsonResponse({
-        'id': user.id,
-        'email': user.email,
-        'username': user.username,
-    })
+        return map(other_user, friendships)
 ```
 
-Add `from django.shortcuts import get_object_or_404`.
+You add a new serializer to render the `Friendship` resources.
+
+**example/serializers.py**
+
+```python
+class FriendshipSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Friendship
+        fields = ('id', 'user1', 'user2', 'status',)
+        read_only_fields = ('id',)
+```
+
+You add a new view.
+
+**example/views.py**
+
+```python
+class FriendshipsView(ModelViewSet):
+    serializer_class = FriendshipSerializer
+
+    def get_queryset(self):
+        return Friendship.objects.friendships(self.request.user)
+```
+
+You add a new URL.
+
+**example/urls.py**
+
+```python
+path('friendships/', FriendshipsView.as_view({'post': 'create'})),
+```
+
+Your code works: a user can add another user as a friend. This isn't ideal behavior. A user should not be able to add any user as a friend. That other user might not want to be friends.
+
+"A user should be able to request a friendship with another user."
+
+Replace your previous scenario with this one.
+
+**example/features/friendship.feature**
 
 ```gherkin
 Scenario: A user can request a friendship with another user
 
   Given I empty the "Friendship" table
 
-  When I request a friendship with "Brian"
+  When I request the following friendship:
+    | user1 | user2 |
+    | 1     | 2     |
 
   Then I see the following response data:
     | id | user1 | user2 | status  |
     | 3  | 1     | 2     | PENDING |
 ```
 
+Refactor your test step.
+
+**example/features/friendship_steps.py**
+
 ```python
-@step('I request a friendship with "([^"]+)"')
-def step_request_friendship(self, username):
-    world.response = world.client.post('/friendship-requests/', data={'username': username})
+@step('I request the following friendship:')
+def step_request_friendship(self):
+    world.response = world.client.post('/friendship-requests/', data=guess_types(self.hashes[0]))
 ```
+
+Add a new `status` field to the `Friendship` model.
+
+**example/models.py**
 
 ```python
 class Friendship(models.Model):
@@ -403,63 +499,52 @@ class Friendship(models.Model):
       (ACCEPTED, ACCEPTED),
       (REJECTED, REJECTED),
     )
+    objects = FriendshipManager()
     user1 = models.ForeignKey(
-      settings.AUTH_USER_MODEL, 
-      on_delete=models.CASCADE, 
+      settings.AUTH_USER_MODEL,
+      on_delete=models.CASCADE,
       related_name='user1_friendships'
     )
     user2 = models.ForeignKey(
-      settings.AUTH_USER_MODEL, 
-      on_delete=models.CASCADE, 
+      settings.AUTH_USER_MODEL,
+      on_delete=models.CASCADE,
       related_name='user2_friendships'
     )
     status = models.CharField(max_length=8, choices=STATUSES, default=PENDING)
 ```
 
-```bash
+Make a migration and migrate the database.
+
+```
 python manage.py makemigrations
 python manage.py migrate
 ```
 
+Rename the view.
+
+**example/views.py**
+
 ```python
-class FriendshipRequestsView(View):
-    def post(self, request, *args, **kwargs):
-        username = request.POST.get('username')
-        user = get_object_or_404(User, username=username)
+class FriendshipRequestsView(ModelViewSet):
+    serializer_class = FriendshipSerializer
 
-        # Confirm the friendship is not with yourself.
-        if request.user == user:
-            return JsonResponse(
-                data={'detail': 'You cannot create a friendship with yourself.'}
-            )
-
-        # Confirm the friendship does not exist.
-        has_friendship = Friendship.objects.filter(
-            Q(user1=request.user, user2=user) |
-            Q(user1=user, user2=request.user)
-        ).exists()
-
-        if has_friendship:
-            return JsonResponse(
-                data={'detail': 'You cannot create a new friendship with an existing friend.'}
-            )
-
-        # Create a new friendship between the users.
-        friendship = Friendship.objects.create(user1=request.user, user2=user)
-
-        return JsonResponse({
-            'id': friendship.id,
-            'user1': friendship.user1_id,
-            'user2': friendship.user2_id,
-            'status': friendship.status,
-        })
+    def get_queryset(self):
+        return Friendship.objects.friendships(self.request.user)
 ```
 
+You refactor the URL path.
+
+**example/urls.py**
+
 ```python
-path('friendship-requests/', FriendshipRequestsView.as_view())
+path('friendship-requests/', FriendshipRequestsView.as_view({'post': 'create'}))
 ```
 
 Import `from example.views import FriendshipRequestsView`.
+
+You add new test scenarios.
+
+**example/features/friendship.feature**
 
 ```gherkin
 Scenario: A user can accept a friendship request
@@ -491,42 +576,36 @@ Scenario: A user can reject a friendship request
     | 1  | 2     | 1     | REJECTED |
 ```
 
+You add new test steps.
+
+**example/features/friendship_steps.py**
+
 ```python
 @step('I accept the friendship request with ID "([^"]+)"')
 def step_accept_friendship_request(self, pk):
-    world.response = world.client.put(f'/friendship-requests/{pk}/', data=json.dumps({
+    world.response = world.client.put(f'/friendship-requests/{pk}/', data={
       'status': Friendship.ACCEPTED
-    }), content_type='application/json')
+    })
 
 
 @step('I reject the friendship request with ID "([^"]+)"')
 def step_reject_friendship_request(self, pk):
-    world.response = world.client.put(f'/friendship-requests/{pk}/', data=json.dumps({
+    world.response = world.client.put(f'/friendship-requests/{pk}/', data={
       'status': Friendship.REJECTED
-    }), content_type='application/json')
-```
-
-```python
-path('friendship-requests/<int:pk>/', FriendshipRequestsView.as_view())
-```
-
-```python
-def put(self, request, *args, **kwargs):
-    # Update friendship.
-    friendship = get_object_or_404(Friendship, pk=kwargs.get('pk'))
-    for key, value in json.loads(request.body).items():
-        setattr(friendship, key, value)
-    friendship.save()
-
-    return JsonResponse({
-        'id': friendship.id,
-        'user1': friendship.user1_id,
-        'user2': friendship.user2_id,
-        'status': friendship.status,
     })
 ```
 
+You add a new URL path.
+
+**example/urls.py**
+
+```python
+path('friendship-requests/<int:pk>/', FriendshipRequestsView.as_view({'put': 'partial_update'}))
+```
+
 Update `Scenario: A user can see a list of friends` like the following.
+
+**example/features/friendship.feature**
 
 ```gherkin
 Scenario: A user can see a list of friends
@@ -548,6 +627,8 @@ Scenario: A user can see a list of friends
 
 Add one more scenario.
 
+**example/features/friendship.feature**
+
 ```gherkin
 Scenario: A user with no accepted friendship requests sees an empty list
 
@@ -564,6 +645,10 @@ Scenario: A user with no accepted friendship requests sees an empty list
     | id | email | username |
 ```
 
+You edit the following step.
+
+**example/features/friendship_steps.py**
+
 ```python
 @step('I create the following friendships:')
 def step_create_friendships(self):
@@ -577,11 +662,21 @@ def step_create_friendships(self):
     ])
 ```
 
+You update the model.
+
+**example/models.py**
+
 ```python
-# Get all friendships that involve the logged-in user.
-friendships = Friendship.objects.select_related('user1', 'user2').filter(
-    Q(user1=request.user) |
-    Q(user2=request.user),
-    status=Friendship.ACCEPTED
-)
+def friends(self, user):
+    """Get all users that are friends with the specified user."""
+    friendships = self.friendships(user).filter(status=Friendship.ACCEPTED)
+
+    def other_user(friendship):
+        if friendship.user1 == user:
+            return friendship.user2
+        return friendship.user1
+
+    return map(other_user, friendships)
 ```
+
+Feature complete!

@@ -61,7 +61,11 @@ Feature: Friendships
 
     Given I empty the "Friendship" table
 
-    When I request a friendship with "Brian"
+#    When I request a friendship with "Brian"
+
+    When I request the following friendship:
+      | user1 | user2 |
+      | 1     | 2     |
 
     Then I see the following response data:
       | id | user1 | user2 | status  |

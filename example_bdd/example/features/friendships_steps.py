@@ -1,19 +1,18 @@
-import json
-
 from aloe import before, step, world
 from aloe.tools import guess_types
 from aloe_django.steps.models import get_model, reset_sequence
 from nose.tools import assert_count_equal, assert_dict_equal, assert_true
 
 from django.contrib.auth.models import User
-from django.test.client import Client
+
+from rest_framework.test import APIClient
 
 from ..models import Friendship
 
 
 @before.each_feature
 def before_each_feature(feature):
-    world.client = Client()
+    world.client = APIClient()
 
 
 @step('I create the following users:')
@@ -65,20 +64,20 @@ def step_create_friendships(self):
     ])
 
 
-@step('I request a friendship with "([^"]+)"')
-def step_request_friendship(self, username):
-    world.response = world.client.post('/friendship-requests/', data={'username': username})
+@step('I request the following friendship:')
+def step_request_friendship(self):
+    world.response = world.client.post('/friendship-requests/', data=guess_types(self.hashes[0]))
 
 
 @step('I accept the friendship request with ID "([^"]+)"')
 def step_accept_friendship_request(self, pk):
-    world.response = world.client.put(f'/friendship-requests/{pk}/', data=json.dumps({
+    world.response = world.client.put(f'/friendship-requests/{pk}/', data={
       'status': Friendship.ACCEPTED
-    }), content_type='application/json')
+    })
 
 
 @step('I reject the friendship request with ID "([^"]+)"')
 def step_reject_friendship_request(self, pk):
-    world.response = world.client.put(f'/friendship-requests/{pk}/', data=json.dumps({
+    world.response = world.client.put(f'/friendship-requests/{pk}/', data={
       'status': Friendship.REJECTED
-    }), content_type='application/json')
+    })
