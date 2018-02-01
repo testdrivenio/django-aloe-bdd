@@ -44,7 +44,7 @@ Feature: Friendships
     Then I am logged in
 ```
 
-An Aloe test case is called a feature. Developers program features using two files--a _Feature_ file and a _Steps_ file. The _Feature_ file consists of statements written in plain English that describe how to configure, execute, and confirm the results of a test. Use the `Feature` keyword to label the feature and the `Scenario` keyword to define a user story that you are planning to test. In the example above, the scenario defines a series of steps that explain how to populate the _User_ database table, log a user into the app, and validate the login. All step statements must begin with one of four keywords: `Given`, `When`, `Then`, or `And`.
+An Aloe test case is called a _feature_. Developers program features using two files--a _Feature_ file and a _Steps_ file. The _Feature_ file consists of statements written in plain English that describe how to configure, execute, and confirm the results of a test. Use the `Feature` keyword to label the feature and the `Scenario` keyword to define a user story that you are planning to test. In the example above, the scenario defines a series of steps that explain how to populate the _User_ database table, log a user into the app, and validate the login. All step statements must begin with one of four keywords: `Given`, `When`, `Then`, or `And`.
 
 The _Steps_ file contains Python functions that are mapped to the _Feature_ file steps using regular expressions.
 
@@ -74,6 +74,8 @@ Ran 1 test in 0.509s
 FAILED (errors=1)
 Destroying test database for alias 'default'...
 ```
+
+The test fails because you haven't mapped the step statements to Python functions. You do so in the following file.
 
 **example/features/friendships_steps.py**
 
@@ -114,9 +116,23 @@ def step_confirm_log_in(self):
     assert_true(world.is_logged_in)
 ```
 
-Each statement is mapped to a Python function via a `@step()` decorator. For example, `Given I empty the "User" table` will trigger the `step_empty_table()` function to run. In this case, the string `"User"` will be captured and passed to the function as the `model_name` parameter. The Aloe API includes a special global variable called `world` that can be used to store and retrieve data between test steps. Notice how the `world.is_logged_in` variable is created in `step_log_in()` and then accessed in `step_confirm_log_in()`. Lastly, Aloe also defines a special `@before` decorator to execute functions before tests run.
+Each statement is mapped to a Python function via a `@step()` decorator. For example, `Given I empty the "User" table` will trigger the `step_empty_table()` function to run. In this case, the string `"User"` will be captured and passed to the function as the `model_name` parameter. The Aloe API includes a special global variable called `world` that can be used to store and retrieve data between test steps. Notice how the `world.is_logged_in` variable is created in `step_log_in()` and then accessed in `step_confirm_log_in()`. Aloe also defines a special `@before` decorator to execute functions before tests run.
 
-Run the Aloe test suite with the following command to see all tests pass.
+One last thing--consider the structure of the following statement.
+
+```gherkin
+And I create the following users:
+  | id | email             | username | password  |
+  | 1  | annie@example.com | Annie    | pAssw0rd! |
+```
+
+With Aloe, you can represent lists of dictionaries using a tabular structure. Access the data using `self.hashes`. Wrapping `self.hashes` in the `guess_types()` function returns the list with the dictionary values correctly typed. In the case of this example, `guess_types(self.hashes)` returns this code.
+
+```python
+[{'id': 1, 'email': 'annie@example.com', 'username': 'Annie', 'password': 'pAssw0rd!'}]
+```
+
+You run the Aloe test suite with the following command and see all tests pass.
 
 ```
 python manage.py harvest
@@ -133,7 +149,7 @@ OK
 Destroying test database for alias 'default'...
 ```
 
-Write a test scenario for the second part of the feature request: _a user can see a list of friends_.
+You write a test scenario for the second part of the feature request: _a user can see a list of friends_.
 
 **example/features/friendship.feature**
 
@@ -148,7 +164,7 @@ Scenario: A user can see a list of friends
     | id | email | username |
 ```
 
-Before you run the Aloe test suite, modify the first scenario to use the keyword `Background` instead of `Scenario`. Background is a special type of scenario that is run once before every block defined by `Scenario` in the _Feature_ file. Every scenario needs to start with a clean slate and using `Background` refreshes the data every time it is run.
+Before you run the Aloe test suite, you modify the first scenario to use the keyword `Background` instead of `Scenario`. Background is a special type of scenario that is run once before every block defined by `Scenario` in the _Feature_ file. Every scenario needs to start with a clean slate and using `Background` refreshes the data every time it is run.
 
 **example/features/friendship.feature**
 
@@ -186,9 +202,9 @@ Feature: Friendships
       | 2  | brian@example.com | Brian    |
 ```
 
-The new scenario clears all entries from a "Friendship" table and creates one new record to define a friendship between Annie and Brian. Then it calls an API to retrieve a list of Annie's friends and it confirms that the response data includes Brian.
+Now that you're dealing with friendships between multiple users, you add a couple new user records to the database to start. The new scenario clears all entries from a "Friendship" table and creates one new record to define a friendship between Annie and Brian. Then it calls an API to retrieve a list of Annie's friends and it confirms that the response data includes Brian.
 
-You start by creating a "Friendship" database table.
+The first step you take is to create a `Friendship` model. It's simple--it just links two users together.
 
 **example/models.py**
 
@@ -210,7 +226,7 @@ class Friendship(models.Model):
     )
 ```
 
-Then you make a migration.
+Then you make a migration and run it.
 
 ```
 python manage.py makemigrations
@@ -233,15 +249,13 @@ def step_create_friendships(self):
     ])
 ```
 
-Add the `Friendship` model import.
+Add the `Friendship` model import to the file.
 
 ```python
 from ..models import Friendship
 ```
 
-Create an API to get a list of the logged-in user's friends.
-
-First, you create a serializer to handle the representation of the `User` resource.
+Next you create an API to get a list of the logged-in user's friends. You create a serializer to handle the representation of the `User` resource.
 
 **example/serializers.py**
 
@@ -281,9 +295,11 @@ class FriendshipManager(models.Manager):
         return map(other_user, friendships)
 ```
 
-Add `from django.db.models import Q` and add `objects = FriendshipManager()` to the `Friendship` model.
+The `friends()` function retrieves all of the friendships that the specified user shares with other users. Then it returns a list of those other users. 
 
-Then, you create a simple `ListAPIView` to return a JSON-serialized representation of your `User` resources.
+You add `from django.db.models import Q` and add `objects = FriendshipManager()` to the `Friendship` model.
+
+Then, you create a simple `ListAPIView` to return a JSON-serialized list of your `User` resources.
 
 **example/views.py**
 
@@ -314,7 +330,7 @@ urlpatterns = [
 ]
 ```
 
-Create the remaining Python step functions.
+You create the remaining Python step functions--one to call your new API and another generic function to confirm response payload data.
 
 **example/features/friendship_steps.py**
 
@@ -333,15 +349,13 @@ def step_confirm_response_data(self):
         assert_dict_equal(guess_types(self.hashes)[0], response)
 ```
 
-Import the `assert_count_equal()` and `assert_dict_equal()` functions from `nose.tools`.
-
 You run the tests and watch them pass.
 
 ```
 python manage.py harvest
 ```
 
-Add one more test scenario.
+You think of another test scenario. Users with no friends should see an empty list when they call the API.
 
 **example/features/friendship.feature**
 
@@ -358,9 +372,9 @@ Scenario: A user with no friends sees an empty list
     | id | email | username |
 ```
 
-New feature:
+No new Python functions are required. You reused all of your steps! Tests pass without any intervention.
 
-"A user should be able to add another user as a friend."
+You need one last piece of functionality to get this feature off the ground. Users can get a list of their friends, but how do they make new friends? You think of a new scenario: "a user should be able to add another user as a friend." Users should be able to call an API to create a friendship with another user. You know the API works if a record gets created in the database.
 
 **example/features/friendship.feature**
 
@@ -377,6 +391,8 @@ Scenario: A user can add a friend
     | user1 | user2 |
     | 1     | 2     |
 ```
+
+You create the new step functions.
 
 **example/features/friendship_steps.py**
 
@@ -453,11 +469,15 @@ You add a new URL.
 path('friendships/', FriendshipsView.as_view({'post': 'create'})),
 ```
 
-Your code works: a user can add another user as a friend. This isn't ideal behavior. A user should not be able to add any user as a friend. That other user might not want to be friends.
+Your code works and the tests pass!
 
-"A user should be able to request a friendship with another user."
+## Analyzing the Feature
 
-Replace your previous scenario with this one.
+Now that you successfully programmed and tested your feature, it's time to analyze it. Two users become friends when one user adds the other one. Maybe the other user doesn't want to be friends--don't they get a say? This is not ideal behavior. A user should _request_ a friendship with another user, and the other user should be able to accept or reject that friendship.
+
+You revise the scenario where a user adds another user as a friend: "a user should be able to request a friendship with another user."
+
+You replace `Scenario: A user can add a friend` with this one.
 
 **example/features/friendship.feature**
 
@@ -475,7 +495,7 @@ Scenario: A user can request a friendship with another user
     | 3  | 1     | 2     | PENDING |
 ```
 
-Refactor your test step.
+You also refactor your test step to use a new API, `/friendship-requests`.
 
 **example/features/friendship_steps.py**
 
@@ -485,7 +505,7 @@ def step_request_friendship(self):
     world.response = world.client.post('/friendship-requests/', data=guess_types(self.hashes[0]))
 ```
 
-Add a new `status` field to the `Friendship` model.
+You start by adding a new `status` field to the `Friendship` model.
 
 **example/models.py**
 
@@ -513,14 +533,16 @@ class Friendship(models.Model):
     status = models.CharField(max_length=8, choices=STATUSES, default=PENDING)
 ```
 
-Make a migration and migrate the database.
+Friendships can be `ACCEPTED` or `REJECTED`. If the other user has not taken action, then the default status is `PENDING`.
+
+You make a migration and migrate the database.
 
 ```
 python manage.py makemigrations
 python manage.py migrate
 ```
 
-Rename the view.
+You rename the `FriendshipsView`.
 
 **example/views.py**
 
@@ -540,9 +562,7 @@ You refactor the URL path.
 path('friendship-requests/', FriendshipRequestsView.as_view({'post': 'create'}))
 ```
 
-Import `from example.views import FriendshipRequestsView`.
-
-You add new test scenarios.
+You add new test scenarios to test the accept and reject actions.
 
 **example/features/friendship.feature**
 
@@ -603,7 +623,7 @@ You add a new URL path.
 path('friendship-requests/<int:pk>/', FriendshipRequestsView.as_view({'put': 'partial_update'}))
 ```
 
-Update `Scenario: A user can see a list of friends` like the following.
+You update `Scenario: A user can see a list of friends` to include the new `status` field.
 
 **example/features/friendship.feature**
 
@@ -625,7 +645,7 @@ Scenario: A user can see a list of friends
     | 2  | brian@example.com | Brian    |
 ```
 
-Add one more scenario.
+You add one more scenario to test filtering on the status. A user's friends consist of people who have accepted friendship requests from the user. Those who have not taken action or who have rejected the requests are not considered.
 
 **example/features/friendship.feature**
 
@@ -645,7 +665,7 @@ Scenario: A user with no accepted friendship requests sees an empty list
     | id | email | username |
 ```
 
-You edit the following step.
+You edit the `step_create_friendships()` function to implement the `status` field on the `Friendship` model.
 
 **example/features/friendship_steps.py**
 
@@ -662,7 +682,7 @@ def step_create_friendships(self):
     ])
 ```
 
-You update the model.
+You complete the filtering by adjusting the `friends()` method on the manager.
 
 **example/models.py**
 
@@ -680,3 +700,5 @@ def friends(self, user):
 ```
 
 Feature complete!
+
+## Conclusion
