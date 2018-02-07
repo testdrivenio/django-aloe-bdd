@@ -144,7 +144,7 @@ With Aloe, you can represent lists of dictionaries using a tabular structure. Ac
 Run the Aloe test suite with the following command and see all tests pass.
 
 ```sh
-python manage.py harvest
+$ python manage.py harvest
 ```
 
 ```
@@ -549,8 +549,8 @@ Friendships can be `ACCEPTED` or `REJECTED`. If the other user has not taken act
 Make a migration and migrate the database.
 
 ```
-python manage.py makemigrations
-python manage.py migrate
+$ python manage.py makemigrations
+$ python manage.py migrate
 ```
 
 Rename the `FriendshipsView` to `FriendshipRequestsView.
@@ -714,4 +714,4 @@ Feature complete!
 
 ## Conclusion
 
-If you take one thing from this post, I hope it's this: behaviors-driven development is as much about feature analysis as it is about writing, testing, and designing code. Without that crucial step, you're not creating software, you're just programming. BDD is not the only way to produce software, but it's a good one. And if you're practicing BDD with a Django project, give Aloe a try.
+If you take one thing from this post, I hope it's this: behavior-driven development is as much about feature analysis as it is about writing, testing, and designing code. Without that crucial step, you're not creating software, you're just programming. BDD is not the only way to produce software, but it's a good one. And if you're practicing BDD with a Django project, give Aloe a try.
