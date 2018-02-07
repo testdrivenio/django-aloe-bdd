@@ -1,18 +1,22 @@
 Imagine you are a Django developer building a social network for a lean startup. The CEO is pressuring your team for an MVP. The engineers have agreed to build the product using behavior-driven development (BDD) to deliver fast and efficient results. The product owner gives you the first feature request, and following the practice of all good programming methodologies, you begin the BDD process by writing a test. Next you code a bit of functionality to make your test pass and you consider your design. The last step requires you to analyze the feature itself. Does it belong in your app?
 
-We can't answer that question for you, but we can teach you when to ask it. In the following tutorial, we walk you through the BDD development cycle by programming an example feature using Django and Aloe. Follow along to learn how you can use the BDD process to help catch and fix poor designs quickly while programming a stable app.
+We can't answer that question for you, but we can teach you when to ask it. *In the following tutorial, we walk you through the BDD development cycle by programming an example feature using Django and [Aloe](https://aloe.readthedocs.io/)*. Follow along to learn how you can use the BDD process to help catch and fix poor designs quickly while programming a stable app.
 
 ## Objectives
 
-By the time you complete this tutorial, you should:
-- Have a basic understanding of business-driven development
-- Have a general idea of how to implement BDD in a new project
-- Be able to test your Django applications using Aloe
+By the time you complete this tutorial, you should be able to:
+
+- Describe and practice behavior-driven development (BDD)
+- Explain how to implement BDD in a new project
+- Test your Django applications using Aloe
 
 ## Project Setup
 
-```
-(venv) $ pip install django djangorestframework aloe_django
+```sh
+(venv) $ pip install \
+        django==2.0.2 \
+        djangorestframework==3.7.7 \
+        aloe_django==0.1.3
 (venv) $ django-admin startproject example_bdd
 (venv) $ cd example_bdd
 (venv) $ python manage.py startapp example
@@ -24,7 +28,9 @@ Behavior-driven development is...
 
 ## Your First Feature Request
 
-"Users should be able to log into the app and see a list of their friends." That's how your product manager starts the conversation about the app's first feature. It's not much but you can use it to write a test. He's actually requesting two pieces of functionality--user authentication and the ability to form relationships between users. Here's a rule of thumb: treat a conjunction like a beacon warning you against trying to test too many things at once. If you ever see an "and" or an "or" in a test statement, you should break that test into smaller ones. 
+"Users should be able to log into the app and see a list of their friends."
+
+That's how your product manager starts the conversation about the app's first feature. It's not much but you can use it to write a test. She's actually requesting two pieces of functionality--user authentication and the ability to form relationships between users. Here's a rule of thumb: treat a conjunction like a beacon warning you against trying to test too many things at once. If you ever see an "and" or an "or" in a test statement, you should break that test into smaller ones.
 
 With that truism in mind take the first half of the feature request and write a test scenario: _a user can log into the app_. In order to support user authentication, your app must store user credentials and give users a way to access their data with those credentials. Here's how you translate those criteria into an Aloe _.feature_ file.
 
@@ -46,13 +52,14 @@ Feature: Friendships
     Then I am logged in
 ```
 
-An Aloe test case is called a _feature_. Developers program features using two files--a _Feature_ file and a _Steps_ file. The _Feature_ file consists of statements written in plain English that describe how to configure, execute, and confirm the results of a test. Use the `Feature` keyword to label the feature and the `Scenario` keyword to define a user story that you are planning to test. In the example above, the scenario defines a series of steps that explain how to populate the _User_ database table, log a user into the app, and validate the login. All step statements must begin with one of four keywords: `Given`, `When`, `Then`, or `And`.
+An Aloe test case is called a _feature_. You program features using two files--a _Feature_ file and a _Steps_ file.
 
-The _Steps_ file contains Python functions that are mapped to the _Feature_ file steps using regular expressions.
+1. The _Feature_ file consists of statements written in plain English that describe how to configure, execute, and confirm the results of a test. Use the `Feature` keyword to label the feature and the `Scenario` keyword to define a user story that you are planning to test. In the example above, the scenario defines a series of steps that explain how to populate the _User_ database table, log a user into the app, and validate the login. All step statements must begin with one of four keywords: `Given`, `When`, `Then`, or `And`.
+1. The _Steps_ file contains Python functions that are mapped to the _Feature_ file steps using regular expressions.
 
 Run `python manage.py harvest` and see the following output.
 
-```
+```sh
 nosetests --verbosity=1
 Creating test database for alias 'default'...
 E
@@ -136,7 +143,7 @@ With Aloe, you can represent lists of dictionaries using a tabular structure. Ac
 
 Run the Aloe test suite with the following command and see all tests pass.
 
-```
+```sh
 python manage.py harvest
 ```
 
@@ -217,22 +224,22 @@ from django.db import models
 
 class Friendship(models.Model):
     user1 = models.ForeignKey(
-      settings.AUTH_USER_MODEL, 
-      on_delete=models.CASCADE, 
+      settings.AUTH_USER_MODEL,
+      on_delete=models.CASCADE,
       related_name='user1_friendships'
     )
     user2 = models.ForeignKey(
-      settings.AUTH_USER_MODEL, 
-      on_delete=models.CASCADE, 
+      settings.AUTH_USER_MODEL,
+      on_delete=models.CASCADE,
       related_name='user2_friendships'
     )
 ```
 
 Make a migration and run it.
 
-```
-python manage.py makemigrations
-python manage.py migrate
+```sh
+$ python manage.py makemigrations
+$ python manage.py migrate
 ```
 
 Next, create a new test step for the `I create the following friendships:` statement.
@@ -301,7 +308,7 @@ class FriendshipManager(models.Manager):
         return map(other_user, friendships)
 ```
 
-The `friends()` function retrieves all of the friendships that the specified user shares with other users. Then it returns a list of those other users. Add `objects = FriendshipManager()` to the `Friendship` model. 
+The `friends()` function retrieves all of the friendships that the specified user shares with other users. Then it returns a list of those other users. Add `objects = FriendshipManager()` to the `Friendship` model.
 
 Create a simple `ListAPIView` to return a JSON-serialized list of your `User` resources.
 
@@ -355,8 +362,8 @@ def step_confirm_response_data(self):
 
 Run the tests and watch them pass.
 
-```
-python manage.py harvest
+```sh
+$ python manage.py harvest
 ```
 
 Think of another test scenario. Users with no friends should see an empty list when they call the API.
@@ -707,4 +714,4 @@ Feature complete!
 
 ## Conclusion
 
-If you take one thing from this post, I hope it's this: business-driven development is as much about feature analysis as it is about writing, testing, and designing code. Without that crucial step, you're not creating software, you're just programming. BDD is not the only way to produce software, but it's a good one. And if you're practicing BDD with a Django project, give Aloe a try. 
+If you take one thing from this post, I hope it's this: behaviors-driven development is as much about feature analysis as it is about writing, testing, and designing code. Without that crucial step, you're not creating software, you're just programming. BDD is not the only way to produce software, but it's a good one. And if you're practicing BDD with a Django project, give Aloe a try.
