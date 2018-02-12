@@ -71,3 +71,5 @@ fabric.properties
 .idea/
 
 *.sqlite3
+
+venv
