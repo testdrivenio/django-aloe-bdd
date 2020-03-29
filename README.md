@@ -7,14 +7,22 @@ Check out the [blog post](https://testdriven.io/behavior-driven-development-with
 ## Want to use this project?
 
 1. Fork/Clone
-
-1. Create and activate a virtualenv
-
-1. Install the requirements
-
-1. Run the tests:
-
+    ```sh
+    $ git clone https://github.com/testdrivenio/django-aloe-bdd.git && cd django-aloe-bdd
     ```
-    $ cd example_bdd
-    $ python manage.py harvest
+
+2. Create and activate a virtualenv
+    ```sh
+    $ python3 -m venv venv && source venv/bin/activate
+    ```
+
+3. Install the requirements
+    ```sh
+    (venv)$ pip install -r requirements.txt
+    ```
+
+4. Run the tests:
+    ```sh
+    (venv)$ cd example_bdd
+    (venv)$ python manage.py harvest
     ```
