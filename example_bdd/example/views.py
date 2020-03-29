@@ -2,7 +2,7 @@ from rest_framework.generics import ListAPIView
 from rest_framework.viewsets import ModelViewSet
 
 from .models import Friendship
-from .serializers import FriendshipSerializer, UserSerializer
+from .serializers import UserSerializer, FriendshipSerializer
 
 
 class FriendsView(ListAPIView):

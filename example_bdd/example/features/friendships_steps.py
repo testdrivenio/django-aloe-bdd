@@ -1,11 +1,10 @@
 from aloe import before, step, world
 from aloe.tools import guess_types
-from aloe_django.steps.models import get_model, reset_sequence
-from nose.tools import assert_count_equal, assert_dict_equal, assert_true
+from aloe_django.steps.models import get_model
+from nose.tools import assert_true, assert_list_equal, assert_dict_equal
+from rest_framework.test import APIClient
 
 from django.contrib.auth.models import User
-
-from rest_framework.test import APIClient
 
 from ..models import Friendship
 
@@ -13,6 +12,11 @@ from ..models import Friendship
 @before.each_feature
 def before_each_feature(feature):
     world.client = APIClient()
+
+
+@step('I empty the "([^"]+)" table')
+def step_empty_table(self, model_name):
+    get_model(model_name).objects.all().delete()
 
 
 @step('I create the following users:')
@@ -31,11 +35,16 @@ def step_confirm_log_in(self):
     assert_true(world.is_logged_in)
 
 
-@step('I empty the "([^"]+)" table')
-def step_empty_table(self, model_name):
-    model_class = get_model(model_name)
-    model_class.objects.all().delete()
-    reset_sequence(model_class)
+@step('I create the following friendships:')
+def step_create_friendships(self):
+    Friendship.objects.bulk_create([
+        Friendship(
+            id=data['id'],
+            user1=User.objects.get(id=data['user1']),
+            user2=User.objects.get(id=data['user2']),
+            status=data['status']
+        ) for data in guess_types(self.hashes)
+    ])
 
 
 @step('I get a list of friends')
@@ -47,21 +56,9 @@ def step_get_friends(self):
 def step_confirm_response_data(self):
     response = world.response.json()
     if isinstance(response, list):
-        assert_count_equal(guess_types(self.hashes), response)
+        assert_list_equal(guess_types(self.hashes), response)
     else:
         assert_dict_equal(guess_types(self.hashes)[0], response)
-
-
-@step('I create the following friendships:')
-def step_create_friendships(self):
-    Friendship.objects.bulk_create([
-        Friendship(
-            id=data['id'],
-            user1=User.objects.get(id=data['user1']),
-            user2=User.objects.get(id=data['user2']),
-            status=data['status']
-        ) for data in guess_types(self.hashes)
-    ])
 
 
 @step('I request the following friendship:')
