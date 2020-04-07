@@ -19,7 +19,7 @@ Feature: Friendships
     Given I empty the "Friendship" table
 
     And I create the following friendships:
-      | id | user1 | user2 |status   |
+      | id | user1 | user2 | status   |
       | 1  | 1     | 2     | ACCEPTED |
 
     # Annie and Brian are now friends.
@@ -66,7 +66,6 @@ Feature: Friendships
     Then I see the following response data:
       | id | user1 | user2 | status  |
       | 3  | 1     | 2     | PENDING |
-
   Scenario: A user can accept a friendship request
 
     Given I empty the "Friendship" table

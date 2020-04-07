@@ -1,7 +1,7 @@
 from aloe import before, step, world
 from aloe.tools import guess_types
 from aloe_django.steps.models import get_model
-from nose.tools import assert_true, assert_list_equal, assert_dict_equal
+
 from rest_framework.test import APIClient
 
 from django.contrib.auth.models import User
@@ -32,7 +32,7 @@ def step_log_in(self, username, password):
 
 @step('I am logged in')
 def step_confirm_log_in(self):
-    assert_true(world.is_logged_in)
+    assert world.is_logged_in
 
 
 @step('I create the following friendships:')
@@ -56,14 +56,22 @@ def step_get_friends(self):
 def step_confirm_response_data(self):
     response = world.response.json()
     if isinstance(response, list):
-        assert_list_equal(guess_types(self.hashes), response)
+        assert guess_types(self.hashes) == response
     else:
-        assert_dict_equal(guess_types(self.hashes)[0], response)
+        assert guess_types(self.hashes)[0] == response
 
 
 @step('I request the following friendship:')
 def step_request_friendship(self):
     world.response = world.client.post('/friendship-requests/', data=guess_types(self.hashes[0]))
+
+
+@step('I see the following rows in the "([^"]+)" table:')
+def step_confirm_table(self, model_name):
+    model_class = get_model(model_name)
+    for data in guess_types(self.hashes):
+        has_row = model_class.objects.filter(**data).exists()
+        assert has_row
 
 
 @step('I accept the friendship request with ID "([^"]+)"')
