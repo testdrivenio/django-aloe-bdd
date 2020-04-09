@@ -30,6 +30,20 @@ Feature: Friendships
       | id | email             | username |
       | 2  | brian@example.com | Brian    |
 
+  Scenario: A user with no accepted friendship requests sees an empty list
+
+    Given I empty the "Friendship" table
+
+    And I create the following friendships:
+      | id | user1 | user2 | status   |
+      | 1  | 1     | 2     | PENDING  |
+      | 2  | 1     | 3     | REJECTED |
+
+    When I get a list of friends
+
+    Then I see the following response data:
+      | id | email | username |
+
   Scenario: A user with no friends sees an empty list
 
     Given I empty the "Friendship" table
@@ -41,27 +55,9 @@ Feature: Friendships
     Then I see the following response data:
       | id | email | username |
 
-  Scenario: A user with no accepted friendship requests sees an empty list
+  Scenario: A user can request a friendship with another user
 
     Given I empty the "Friendship" table
-
-    And I create the following friendships:
-      | id | user1 | user2 | status   |
-      | 1  | 1     | 2     | PENDING  |
-      | 2  | 1     | 3     | REJECTED |
-
-    # No one has accepted Annie's friend requests.
-
-    When I get a list of friends
-
-    Then I see the following response data:
-      | id | email | username |
-
-  Scenario: A user can request a friendship with another user.
-
-    Given I empty the "Friendship" table
-
-#    When I request a friendship with "Brian"
 
     When I request the following friendship:
       | user1 | user2 |
@@ -70,7 +66,6 @@ Feature: Friendships
     Then I see the following response data:
       | id | user1 | user2 | status  |
       | 3  | 1     | 2     | PENDING |
-
   Scenario: A user can accept a friendship request
 
     Given I empty the "Friendship" table

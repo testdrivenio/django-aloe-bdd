@@ -1,11 +1,10 @@
 from aloe import before, step, world
 from aloe.tools import guess_types
-from aloe_django.steps.models import get_model, reset_sequence
-from nose.tools import assert_count_equal, assert_dict_equal, assert_true
-
-from django.contrib.auth.models import User
+from aloe_django.steps.models import get_model
 
 from rest_framework.test import APIClient
+
+from django.contrib.auth.models import User
 
 from ..models import Friendship
 
@@ -13,6 +12,11 @@ from ..models import Friendship
 @before.each_feature
 def before_each_feature(feature):
     world.client = APIClient()
+
+
+@step('I empty the "([^"]+)" table')
+def step_empty_table(self, model_name):
+    get_model(model_name).objects.all().delete()
 
 
 @step('I create the following users:')
@@ -28,28 +32,7 @@ def step_log_in(self, username, password):
 
 @step('I am logged in')
 def step_confirm_log_in(self):
-    assert_true(world.is_logged_in)
-
-
-@step('I empty the "([^"]+)" table')
-def step_empty_table(self, model_name):
-    model_class = get_model(model_name)
-    model_class.objects.all().delete()
-    reset_sequence(model_class)
-
-
-@step('I get a list of friends')
-def step_get_friends(self):
-    world.response = world.client.get('/friends/')
-
-
-@step('I see the following response data:')
-def step_confirm_response_data(self):
-    response = world.response.json()
-    if isinstance(response, list):
-        assert_count_equal(guess_types(self.hashes), response)
-    else:
-        assert_dict_equal(guess_types(self.hashes)[0], response)
+    assert world.is_logged_in
 
 
 @step('I create the following friendships:')
@@ -64,9 +47,31 @@ def step_create_friendships(self):
     ])
 
 
+@step('I get a list of friends')
+def step_get_friends(self):
+    world.response = world.client.get('/friends/')
+
+
+@step('I see the following response data:')
+def step_confirm_response_data(self):
+    response = world.response.json()
+    if isinstance(response, list):
+        assert guess_types(self.hashes) == response
+    else:
+        assert guess_types(self.hashes)[0] == response
+
+
 @step('I request the following friendship:')
 def step_request_friendship(self):
     world.response = world.client.post('/friendship-requests/', data=guess_types(self.hashes[0]))
+
+
+@step('I see the following rows in the "([^"]+)" table:')
+def step_confirm_table(self, model_name):
+    model_class = get_model(model_name)
+    for data in guess_types(self.hashes):
+        has_row = model_class.objects.filter(**data).exists()
+        assert has_row
 
 
 @step('I accept the friendship request with ID "([^"]+)"')
