@@ -1,3 +1,3 @@
 aloe-django==0.2.0
-Django==3.0.5
+Django==3.1.6
 djangorestframework==3.11.0
